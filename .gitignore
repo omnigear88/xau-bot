@@ -1,18 +1,36 @@
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
 
 # Virtual environment
 .venv/
+venv/
 
-# Environment variables
+# Environment variables (contains secrets)
 .env
 
-# SQLite database (optional)
+# SQLite databases
 data/*.db
+*.db
+
+# Logs
+*.log
+logs/
+
+# macOS
+.DS_Store
 
 # VS Code
 .vscode/
 
-# macOS
-.DS_Store
+# JetBrains
+.idea/
+
+# Python cache
+.pytest_cache/
+.mypy_cache/
+
+# Git
+.pytest_cache/
+.mypy_cache/
