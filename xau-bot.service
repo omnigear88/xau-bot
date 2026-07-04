@@ -4,11 +4,10 @@ After=network-online.target
 
 [Service]
 WorkingDirectory=/home/omnigear/xau-bot
-ExecStart=/home/omnigear/xau-bot/.venv/bin/python /home/omnigear/xau-bot/stream_main.py
+ExecStart=/home/omnigear/xau-bot/.venv/bin/python /home/omnigear/xau-bot/bot.py
 Restart=always
 RestartSec=10
 User=root
 
 [Install]
 WantedBy=multi-user.target
-

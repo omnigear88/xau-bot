@@ -2,9 +2,15 @@ from indicators import add_indicators
 
 
 def analyze_timeframe(df):
+    if len(df) < 60:
+        return None
+
     df = add_indicators(df)
 
     last = df.iloc[-1]
+
+    if last[["ema13", "ema21", "sma35", "ema50"]].isna().any():
+        return None
 
     bullish = (
         last["close"] > last["ema13"]
@@ -36,6 +42,7 @@ def analyze_timeframe(df):
         "ema50": float(last["ema50"]),
         "signal": signal,
     }
+
 
 def summarize(results):
     bullish_count = sum(1 for r in results.values() if r["signal"] == "Bullish")

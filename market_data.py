@@ -1,21 +1,20 @@
 import time
-import pandas as pd
 from datetime import datetime, UTC
 from trading_ig import IGService, IGStreamService
 from lightstreamer.client import Subscription, SubscriptionListener
 
 from config import IG_USERNAME, IG_PASSWORD, IG_API_KEY, IG_ENV, IG_GOLD_EPIC
-from indicators import add_indicators
+from resampler import get_all_timeframes
+from strategy import analyze_timeframe, summarize
 from telegram_bot import send_telegram
 from state import signal_changed
-from database import init_db, save_candle, load_history
+from database import init_db, save_candle
 
 
 ACC_TYPE = "DEMO" if IG_ENV == "demo" else "LIVE"
 
 SYMBOL = "XAUUSD"
 
-one_minute_rows = []
 current_1m_candle = None
 
 
@@ -27,100 +26,6 @@ def mid(bid, offer):
     if offer is not None:
         return float(offer)
     return None
-
-
-def analyze_df(df):
-    df = df.copy()
-
-    if len(df) < 60:
-        return None
-
-    df = add_indicators(df)
-    last = df.iloc[-1]
-
-    bullish = (
-        last["close"] > last["ema13"]
-        and last["ema13"] > last["ema21"]
-        and last["ema21"] > last["sma35"]
-        and last["sma35"] > last["ema50"]
-    )
-
-    bearish = (
-        last["close"] < last["ema13"]
-        and last["ema13"] < last["ema21"]
-        and last["ema21"] < last["sma35"]
-        and last["sma35"] < last["ema50"]
-    )
-
-    if bullish:
-        signal = "Bullish"
-    elif bearish:
-        signal = "Bearish"
-    else:
-        signal = "Neutral"
-
-    return {
-        "time": str(last["time"]),
-        "close": float(last["close"]),
-        "signal": signal,
-    }
-
-
-def resample_from_1m():
-    if len(one_minute_rows) < 300:
-        print(f"Collecting 1m candles... {len(one_minute_rows)}/300")
-        return None
-
-    df = pd.DataFrame(one_minute_rows)
-    df["time"] = pd.to_datetime(df["time"], utc=True)
-    df = df.drop_duplicates(subset=["time"], keep="last")
-    df = df.sort_values("time")
-    df = df.set_index("time")
-
-    rules = {
-        "15m": "15min",
-        "1H": "1h",
-        "4H": "4h",
-        "1D": "1d",
-    }
-
-    results = {}
-
-    for label, rule in rules.items():
-        tf = (
-            df.resample(rule)
-            .agg({
-                "open": "first",
-                "high": "max",
-                "low": "min",
-                "close": "last",
-            })
-            .dropna()
-            .reset_index()
-        )
-
-        result = analyze_df(tf)
-
-        if result is None:
-            print(f"{label}: not enough candles after resample")
-            return None
-
-        results[label] = result
-
-    return results
-
-
-def summarize(results):
-    bullish = sum(1 for r in results.values() if r["signal"] == "Bullish")
-    bearish = sum(1 for r in results.values() if r["signal"] == "Bearish")
-
-    if bullish == 4:
-        return "ALL_BULLISH"
-
-    if bearish == 4:
-        return "ALL_BEARISH"
-
-    return f"{bullish}/4 Bullish, {bearish}/4 Bearish"
 
 
 def format_message(results, overall):
@@ -149,7 +54,24 @@ def format_message(results, overall):
 
 
 def evaluate_all():
-    results = resample_from_1m()
+    candles_by_timeframe = get_all_timeframes()
+    results = {}
+
+    for timeframe, df in candles_by_timeframe.items():
+        if len(df) < 60:
+            print(
+                f"{timeframe}: not enough candles after resample "
+                f"({len(df)}/60)",
+                flush=True,
+            )
+            return
+
+        result = analyze_timeframe(df)
+        if result is None:
+            print(f"{timeframe}: indicators not ready", flush=True)
+            return
+
+        results[timeframe] = result
 
     if not results:
         return
@@ -170,11 +92,7 @@ def finalize_previous_candle():
     if current_1m_candle is None:
         return
 
-    one_minute_rows.append(current_1m_candle)
     save_candle(SYMBOL, "1m", current_1m_candle)
-
-    if len(one_minute_rows) > 5000:
-        del one_minute_rows[:-5000]
 
     dt = current_1m_candle["time"]
     close = current_1m_candle["close"]
@@ -229,14 +147,7 @@ class ChartListener(SubscriptionListener):
 
 
 def main():
-    global one_minute_rows
-
     init_db()
-
-    df = load_history(SYMBOL, "1m", limit=5000)
-    if not df.empty:
-        one_minute_rows = df.to_dict("records")
-        print(f"Loaded {len(one_minute_rows)} saved 1m candles.")
 
     ig_service = IGService(
         username=IG_USERNAME,
