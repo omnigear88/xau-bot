@@ -79,6 +79,7 @@ def run_bootstrap(days):
 
 def run_offline():
     from database import init_db, load_history
+    from indicators import add_indicators
     from resampler import get_all_timeframes
     from strategy import score_timeframe
 
@@ -110,6 +111,7 @@ def run_offline():
             print("Last close: n/a")
             continue
 
+        df = add_indicators(df)
         score = score_timeframe(df)
         last = df.iloc[-1]
 
@@ -119,6 +121,8 @@ def run_offline():
         print(f"Direction: {score['direction']}")
         print(f"Score: {score['score']}")
         print(f"Confidence: {score['confidence']}")
+        print(f"ATR14: {_format_optional_number(score['atr_14'])}")
+        print(f"Volatility: {score['volatility_note']}")
         print("Reasons:")
         for reason in score["reasons"]:
             print(f"- {reason}")
@@ -136,6 +140,13 @@ def fetch_latest_1m_candles(fetch_forex_aggregates):
         from_date=from_date,
         to_date=to_date,
     )
+
+
+def _format_optional_number(value):
+    if value is None:
+        return "n/a"
+
+    return f"{value:.4f}"
 
 
 def filter_completed_candles(candles):
@@ -158,6 +169,7 @@ def is_completed_15m_boundary(candle):
 
 
 def evaluate_strategy():
+    from indicators import add_indicators
     from resampler import get_all_timeframes
     from state import signal_changed
     from strategy import analyze_timeframe, summarize
@@ -167,10 +179,11 @@ def evaluate_strategy():
     results = {}
 
     for timeframe, df in candles_by_timeframe.items():
-        if len(df) < 60:
-            print(f"{timeframe}: not enough candles after resample ({len(df)}/60)")
+        if len(df) < 50:
+            print(f"{timeframe}: not enough candles after resample ({len(df)}/50)")
             return
 
+        df = add_indicators(df)
         result = analyze_timeframe(df)
         if result is None:
             print(f"{timeframe}: indicators not ready")
@@ -205,6 +218,8 @@ def format_strategy_message(results, overall):
         )
         lines.append(f"Close: {round(result['close'], 2)}")
         lines.append(f"Time: {result['time']}")
+        lines.append(f"ATR14: {_format_optional_number(result['atr_14'])}")
+        lines.append(f"Volatility: {result['volatility_note']}")
         lines.append("Reasons:")
         for reason in result["reasons"]:
             lines.append(f"- {reason}")

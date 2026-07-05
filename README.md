@@ -125,8 +125,8 @@ python test_indicators.py
 
 ## v0.6 Trend Score Engine
 
-`strategy.py` converts indicator state into a 0-100 trend score for each
-timeframe.
+`strategy.py` converts indicator-enriched OHLC DataFrames into a normalized
+0-100 trend score for each timeframe.
 
 The main scoring functions are:
 
@@ -137,16 +137,36 @@ The main scoring functions are:
 Each score result contains:
 
 - `direction` - `Bullish`, `Bearish`, `Neutral`, or `Insufficient Data`
-- `score` - integer from 0 to 100
+- `score` - integer from 0 to 100, calculated as `round(raw_score / 80 * 100)`
 - `confidence` - `Low`, `Medium`, or `High`
+- `atr_14` - latest ATR value, or `None` when unavailable
+- `volatility_note` - `ATR available` or `ATR unavailable`
 - `reasons` - human-readable scoring reasons
 
 The score compares bullish and bearish evidence from EMA alignment, SMA
-position, EMA13 slope, RSI14, MACD histogram, previous close, and ATR
-availability.
+position, EMA13 slope, RSI14, MACD histogram, and previous close. ATR is
+reported as volatility information only; it does not add bullish or bearish
+points.
+
+Bullish raw max score is 80:
+
+- close > ema_13: +10
+- ema_13 > ema_21: +15
+- ema_21 > ema_50: +15
+- close > sma_35: +10
+- ema_13 rising over last 3 candles: +10
+- rsi_14 > 55: +10
+- macd_hist > 0: +10
+- close > previous close: +10
+
+Bearish raw max score is 80 using the mirrored conditions. The returned score
+normalizes that raw score to 0-100.
 
 To test the trend score engine against all local timeframes:
 
 ```bash
 python test_strategy.py
 ```
+
+`test_strategy.py` loads resampled candles, adds indicators with
+`add_indicators(df)`, then scores each timeframe.

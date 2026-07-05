@@ -1,4 +1,4 @@
-from indicators import add_indicators
+DIRECTIONAL_SCORE_MAX = 80
 
 
 def score_timeframe(df):
@@ -7,10 +7,11 @@ def score_timeframe(df):
             "direction": "Insufficient Data",
             "score": 0,
             "confidence": "Low",
-            "reasons": ["Need at least 50 candles"],
+            "atr_14": None,
+            "volatility_note": "ATR unavailable",
+            "reasons": ["Need at least 50 candles", "ATR unavailable"],
         }
 
-    df = add_indicators(df)
     latest = df.iloc[-1]
     previous = df.iloc[-2]
 
@@ -121,26 +122,27 @@ def score_timeframe(df):
     else:
         neutral_reasons.append("Previous close unavailable")
 
-    if _has_value(latest, "atr_14"):
-        bullish_score += 10
-        bearish_score += 10
-        bullish_reasons.append("ATR14 available")
-        bearish_reasons.append("ATR14 available")
-    else:
-        neutral_reasons.append("ATR14 unavailable")
+    atr_14 = _float_or_none(latest["atr_14"]) if "atr_14" in latest else None
+    if atr_14 is None:
+        neutral_reasons.append("ATR unavailable")
 
-    direction, score, reasons = _resolve_direction(
+    volatility_note = "ATR available" if atr_14 is not None else "ATR unavailable"
+
+    direction, raw_score, reasons = _resolve_direction(
         bullish_score,
         bearish_score,
         bullish_reasons,
         bearish_reasons,
         neutral_reasons,
     )
+    score = _normalize_score(raw_score)
 
     return {
         "direction": direction,
-        "score": int(score),
+        "score": score,
         "confidence": _confidence(score),
+        "atr_14": atr_14,
+        "volatility_note": volatility_note,
         "reasons": reasons,
     }
 
@@ -160,25 +162,25 @@ def analyze_timeframe(df):
     if scored["direction"] == "Insufficient Data":
         return None
 
-    df = add_indicators(df)
     latest = df.iloc[-1]
 
     return {
         "time": str(latest["time"]),
         "close": float(latest["close"]),
-        "ema_13": _float_or_none(latest["ema_13"]),
-        "ema_21": _float_or_none(latest["ema_21"]),
-        "sma_35": _float_or_none(latest["sma_35"]),
-        "ema_50": _float_or_none(latest["ema_50"]),
-        "atr_14": _float_or_none(latest["atr_14"]),
-        "rsi_14": _float_or_none(latest["rsi_14"]),
-        "macd": _float_or_none(latest["macd"]),
-        "macd_signal": _float_or_none(latest["macd_signal"]),
-        "macd_hist": _float_or_none(latest["macd_hist"]),
+        "ema_13": _row_float_or_none(latest, "ema_13"),
+        "ema_21": _row_float_or_none(latest, "ema_21"),
+        "sma_35": _row_float_or_none(latest, "sma_35"),
+        "ema_50": _row_float_or_none(latest, "ema_50"),
+        "atr_14": scored["atr_14"],
+        "rsi_14": _row_float_or_none(latest, "rsi_14"),
+        "macd": _row_float_or_none(latest, "macd"),
+        "macd_signal": _row_float_or_none(latest, "macd_signal"),
+        "macd_hist": _row_float_or_none(latest, "macd_hist"),
         "signal": scored["direction"],
         "direction": scored["direction"],
         "score": scored["score"],
         "confidence": scored["confidence"],
+        "volatility_note": scored["volatility_note"],
         "reasons": scored["reasons"],
     }
 
@@ -256,6 +258,10 @@ def _confidence(score):
     return "Low"
 
 
+def _normalize_score(raw_score):
+    return round(raw_score / DIRECTIONAL_SCORE_MAX * 100)
+
+
 def _has_value(row, column):
     if column not in row:
         return False
@@ -269,3 +275,10 @@ def _float_or_none(value):
         return None
 
     return float(value)
+
+
+def _row_float_or_none(row, column):
+    if column not in row:
+        return None
+
+    return _float_or_none(row[column])
