@@ -31,6 +31,17 @@ def save_analysis_state(current_state):
     save_state(state)
 
 
+def get_previous_readiness_state():
+    state = load_state()
+    return state.get("readiness")
+
+
+def save_readiness_state(readiness_state):
+    state = load_state()
+    state["readiness"] = readiness_state
+    save_state(state)
+
+
 def signal_changed(current_overall):
     state = load_state()
 

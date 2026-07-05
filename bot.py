@@ -81,6 +81,7 @@ def run_offline():
     from database import init_db, load_history
     from indicators import add_indicators
     from notification_engine import should_notify
+    from readiness import check_platform_ready
     from resampler import get_all_timeframes
     from state import get_previous_analysis_state
     from strategy import score_timeframe
@@ -104,6 +105,7 @@ def run_offline():
         return
 
     scores = {}
+    enriched_timeframes = {}
 
     for timeframe, df in candles_by_timeframe.items():
         print(f"\n{timeframe}")
@@ -113,9 +115,11 @@ def run_offline():
             print("First: n/a")
             print("Last: n/a")
             print("Last close: n/a")
+            enriched_timeframes[timeframe] = df
             continue
 
         df = add_indicators(df)
+        enriched_timeframes[timeframe] = df
         score = score_timeframe(df)
         scores[timeframe] = score
         last = df.iloc[-1]
@@ -131,6 +135,12 @@ def run_offline():
         print("Reasons:")
         for reason in score["reasons"]:
             print(f"- {reason}")
+
+    readiness = check_platform_ready(enriched_timeframes)
+    print("\nReadiness")
+    print(f"Platform ready: {readiness['ready']}")
+    for timeframe, status in readiness["timeframes"].items():
+        print(f"{timeframe}: ready={status['ready']} reason={status['reason']}")
 
     current_state = build_analysis_state(scores)
     previous_state = get_previous_analysis_state()
@@ -181,16 +191,37 @@ def is_completed_15m_boundary(candle):
 
 def evaluate_strategy():
     from notification_engine import should_notify
-    from state import get_previous_analysis_state, save_analysis_state
+    from readiness import check_platform_ready
+    from state import (
+        get_previous_analysis_state,
+        get_previous_readiness_state,
+        save_analysis_state,
+        save_readiness_state,
+    )
     from telegram_bot import send_telegram
 
-    current_state = analyze_current_market()
+    current_state, enriched_timeframes = analyze_current_market()
+    readiness = check_platform_ready(enriched_timeframes)
+    previous_readiness = get_previous_readiness_state()
     previous_state = get_previous_analysis_state()
-    notify = should_notify(previous_state, current_state)
 
     previous_alert_time = None
     if previous_state:
         previous_alert_time = previous_state.get("last_alert_time")
+
+    if not readiness["ready"]:
+        print("Platform not ready. Trading alert skipped.")
+        log_readiness(readiness)
+        current_state["last_alert_time"] = previous_alert_time
+        save_analysis_state(current_state)
+        save_readiness_state(readiness)
+        return
+
+    if previous_readiness and not previous_readiness.get("ready") and readiness["ready"]:
+        print("Platform became ready. Sending readiness notification.")
+        send_telegram(format_platform_ready_message(readiness))
+
+    notify = should_notify(previous_state, current_state)
 
     if notify:
         print("Notification conditions met. Sending Telegram.")
@@ -201,6 +232,7 @@ def evaluate_strategy():
         current_state["last_alert_time"] = previous_alert_time
 
     save_analysis_state(current_state)
+    save_readiness_state(readiness)
 
 
 def analyze_current_market():
@@ -215,7 +247,7 @@ def analyze_current_market():
     }
     scores = score_all_timeframes(enriched)
 
-    return build_analysis_state(scores)
+    return build_analysis_state(scores), enriched
 
 
 def build_analysis_state(scores):
@@ -242,6 +274,12 @@ def determine_overall_direction(scores):
     return "Neutral"
 
 
+def log_readiness(readiness):
+    print(f"Platform ready: {readiness['ready']}")
+    for timeframe, status in readiness["timeframes"].items():
+        print(f"{timeframe}: ready={status['ready']} reason={status['reason']}")
+
+
 def format_strategy_message(results, overall):
     if overall == "ALL_BULLISH":
         title = "XAUUSD ALL BULLISH"
@@ -265,6 +303,15 @@ def format_strategy_message(results, overall):
         for reason in result["reasons"]:
             lines.append(f"- {reason}")
         lines.append("")
+
+    return "\n".join(lines)
+
+
+def format_platform_ready_message(readiness):
+    lines = ["XAU Platform Ready", ""]
+
+    for timeframe, status in readiness["timeframes"].items():
+        lines.append(f"{timeframe}: {status['reason']}")
 
     return "\n".join(lines)
 

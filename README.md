@@ -207,3 +207,36 @@ To test notification rules:
 ```bash
 python test_notification_engine.py
 ```
+
+## v0.8 Platform Readiness Layer
+
+`readiness.py` prevents misleading trading alerts before every required
+timeframe is usable.
+
+Required timeframes:
+
+- `15m`
+- `1H`
+- `4H`
+- `1D`
+
+Each timeframe must have at least 50 candles, non-empty latest values for
+`ema_13`, `ema_21`, `ema_50`, `sma_35`, `rsi_14`, and `macd_hist`, plus an
+available `atr_14`.
+
+Live mode still analyzes and saves state on completed 15m boundaries, but it
+does not send trading alerts until the platform readiness check passes. When
+the platform changes from not-ready to ready, the bot sends one
+`XAU Platform Ready` message.
+
+Offline mode prints readiness status and per-timeframe reasons:
+
+```bash
+python bot.py offline
+```
+
+To test readiness rules:
+
+```bash
+python test_readiness.py
+```
