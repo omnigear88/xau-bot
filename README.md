@@ -170,3 +170,40 @@ python test_strategy.py
 
 `test_strategy.py` loads resampled candles, adds indicators with
 `add_indicators(df)`, then scores each timeframe.
+
+## v0.7 Notification Engine
+
+`notification_engine.py` separates analysis frequency from notification
+frequency. The bot can analyze every completed 15m boundary, but Telegram is
+sent only when the compact analysis state changes enough to matter.
+
+Notify when:
+
+- There is no previous analysis state
+- Overall direction changes
+- Any timeframe direction changes
+- Any timeframe score changes by 20 or more points
+- Confidence changes from `Low` or `Medium` to `High`
+- The `4H` or `1D` direction changes
+
+Do not notify when only timestamps change, or when score/confidence changes are
+small and direction is unchanged.
+
+The compact saved analysis state contains:
+
+- `overall_direction`
+- Per-timeframe `direction`, `score`, and `confidence`
+- `last_alert_time`
+
+Offline mode prints whether the current analysis would notify compared with the
+saved state:
+
+```bash
+python bot.py offline
+```
+
+To test notification rules:
+
+```bash
+python test_notification_engine.py
+```

@@ -80,7 +80,9 @@ def run_bootstrap(days):
 def run_offline():
     from database import init_db, load_history
     from indicators import add_indicators
+    from notification_engine import should_notify
     from resampler import get_all_timeframes
+    from state import get_previous_analysis_state
     from strategy import score_timeframe
 
     init_db()
@@ -101,6 +103,8 @@ def run_offline():
         )
         return
 
+    scores = {}
+
     for timeframe, df in candles_by_timeframe.items():
         print(f"\n{timeframe}")
         print(f"Rows: {len(df)}")
@@ -113,6 +117,7 @@ def run_offline():
 
         df = add_indicators(df)
         score = score_timeframe(df)
+        scores[timeframe] = score
         last = df.iloc[-1]
 
         print(f"First: {df.iloc[0]['time']}")
@@ -126,6 +131,12 @@ def run_offline():
         print("Reasons:")
         for reason in score["reasons"]:
             print(f"- {reason}")
+
+    current_state = build_analysis_state(scores)
+    previous_state = get_previous_analysis_state()
+
+    print("\nNotification check")
+    print(f"Would notify: {should_notify(previous_state, current_state)}")
 
 
 def fetch_latest_1m_candles(fetch_forex_aggregates):
@@ -169,36 +180,66 @@ def is_completed_15m_boundary(candle):
 
 
 def evaluate_strategy():
-    from indicators import add_indicators
-    from resampler import get_all_timeframes
-    from state import signal_changed
-    from strategy import analyze_timeframe, summarize
+    from notification_engine import should_notify
+    from state import get_previous_analysis_state, save_analysis_state
     from telegram_bot import send_telegram
 
-    candles_by_timeframe = get_all_timeframes()
-    results = {}
+    current_state = analyze_current_market()
+    previous_state = get_previous_analysis_state()
+    notify = should_notify(previous_state, current_state)
 
-    for timeframe, df in candles_by_timeframe.items():
-        if len(df) < 50:
-            print(f"{timeframe}: not enough candles after resample ({len(df)}/50)")
-            return
+    previous_alert_time = None
+    if previous_state:
+        previous_alert_time = previous_state.get("last_alert_time")
 
-        df = add_indicators(df)
-        result = analyze_timeframe(df)
-        if result is None:
-            print(f"{timeframe}: indicators not ready")
-            return
-
-        results[timeframe] = result
-
-    overall = summarize(results)
-    print("Overall:", overall)
-
-    if signal_changed(overall):
-        print("Signal changed. Sending Telegram.")
-        send_telegram(format_strategy_message(results, overall))
+    if notify:
+        print("Notification conditions met. Sending Telegram.")
+        current_state["last_alert_time"] = datetime.now(UTC).isoformat()
+        send_telegram(format_trend_update_message(current_state))
     else:
-        print("No signal change.")
+        print("No notification needed.")
+        current_state["last_alert_time"] = previous_alert_time
+
+    save_analysis_state(current_state)
+
+
+def analyze_current_market():
+    from indicators import add_indicators
+    from resampler import get_all_timeframes
+    from strategy import score_all_timeframes
+
+    candles_by_timeframe = get_all_timeframes()
+    enriched = {
+        timeframe: add_indicators(df) if not df.empty else df
+        for timeframe, df in candles_by_timeframe.items()
+    }
+    scores = score_all_timeframes(enriched)
+
+    return build_analysis_state(scores)
+
+
+def build_analysis_state(scores):
+    return {
+        "overall_direction": determine_overall_direction(scores),
+        "timeframes": scores,
+        "last_alert_time": None,
+    }
+
+
+def determine_overall_direction(scores):
+    directions = [
+        result.get("direction")
+        for result in scores.values()
+        if result.get("direction") != "Insufficient Data"
+    ]
+
+    if directions and all(direction == "Bullish" for direction in directions):
+        return "Bullish"
+
+    if directions and all(direction == "Bearish" for direction in directions):
+        return "Bearish"
+
+    return "Neutral"
 
 
 def format_strategy_message(results, overall):
@@ -222,6 +263,28 @@ def format_strategy_message(results, overall):
         lines.append(f"Volatility: {result['volatility_note']}")
         lines.append("Reasons:")
         for reason in result["reasons"]:
+            lines.append(f"- {reason}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def format_trend_update_message(current_state):
+    lines = [
+        "XAUUSD Trend Update",
+        "",
+        f"Overall direction: {current_state['overall_direction']}",
+        "",
+    ]
+
+    for timeframe, result in current_state["timeframes"].items():
+        lines.append(
+            f"{timeframe}: {result['direction']} "
+            f"score={result['score']} confidence={result['confidence']}"
+        )
+        lines.append(f"ATR14: {_format_optional_number(result['atr_14'])}")
+        lines.append("Reasons:")
+        for reason in result["reasons"][:3]:
             lines.append(f"- {reason}")
         lines.append("")
 
