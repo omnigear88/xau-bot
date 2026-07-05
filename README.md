@@ -69,7 +69,7 @@ python bot.py offline
 ```
 
 Offline mode prints each timeframe's row count, first and last candle times,
-last close, latest EMA13, EMA21, ATR14, RSI14, and MACD histogram.
+last close, direction, score, confidence, and score reasons.
 
 If no mode is provided, the bot defaults to live mode:
 
@@ -121,4 +121,32 @@ To test the indicator engine against local 15m candles:
 
 ```bash
 python test_indicators.py
+```
+
+## v0.6 Trend Score Engine
+
+`strategy.py` converts indicator state into a 0-100 trend score for each
+timeframe.
+
+The main scoring functions are:
+
+- `score_timeframe(df)` - scores one OHLC DataFrame
+- `score_all_timeframes(timeframes)` - scores a dictionary of timeframe
+  DataFrames
+
+Each score result contains:
+
+- `direction` - `Bullish`, `Bearish`, `Neutral`, or `Insufficient Data`
+- `score` - integer from 0 to 100
+- `confidence` - `Low`, `Medium`, or `High`
+- `reasons` - human-readable scoring reasons
+
+The score compares bullish and bearish evidence from EMA alignment, SMA
+position, EMA13 slope, RSI14, MACD histogram, previous close, and ATR
+availability.
+
+To test the trend score engine against all local timeframes:
+
+```bash
+python test_strategy.py
 ```

@@ -79,8 +79,8 @@ def run_bootstrap(days):
 
 def run_offline():
     from database import init_db, load_history
-    from indicators import add_indicators
     from resampler import get_all_timeframes
+    from strategy import score_timeframe
 
     init_db()
     one_minute = load_history(DB_SYMBOL, "1m", limit=1)
@@ -110,17 +110,18 @@ def run_offline():
             print("Last close: n/a")
             continue
 
-        df = add_indicators(df)
+        score = score_timeframe(df)
         last = df.iloc[-1]
 
         print(f"First: {df.iloc[0]['time']}")
         print(f"Last: {last['time']}")
         print(f"Last close: {last['close']}")
-        print(f"Latest EMA13: {_format_number(last['ema_13'])}")
-        print(f"Latest EMA21: {_format_number(last['ema_21'])}")
-        print(f"Latest ATR14: {_format_number(last['atr_14'])}")
-        print(f"Latest RSI14: {_format_number(last['rsi_14'])}")
-        print(f"Latest MACD histogram: {_format_number(last['macd_hist'])}")
+        print(f"Direction: {score['direction']}")
+        print(f"Score: {score['score']}")
+        print(f"Confidence: {score['confidence']}")
+        print("Reasons:")
+        for reason in score["reasons"]:
+            print(f"- {reason}")
 
 
 def fetch_latest_1m_candles(fetch_forex_aggregates):
@@ -135,13 +136,6 @@ def fetch_latest_1m_candles(fetch_forex_aggregates):
         from_date=from_date,
         to_date=to_date,
     )
-
-
-def _format_number(value):
-    if value != value:
-        return "n/a"
-
-    return f"{value:.4f}"
 
 
 def filter_completed_candles(candles):
@@ -205,9 +199,15 @@ def format_strategy_message(results, overall):
     lines = [title, "", f"Overall: {overall}", ""]
 
     for timeframe, result in results.items():
-        lines.append(f"{timeframe}: {result['signal']}")
+        lines.append(
+            f"{timeframe}: {result['direction']} "
+            f"({result['score']}, {result['confidence']})"
+        )
         lines.append(f"Close: {round(result['close'], 2)}")
         lines.append(f"Time: {result['time']}")
+        lines.append("Reasons:")
+        for reason in result["reasons"]:
+            lines.append(f"- {reason}")
         lines.append("")
 
     return "\n".join(lines)
