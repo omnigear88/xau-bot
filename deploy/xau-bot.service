@@ -1,5 +1,5 @@
 [Unit]
-Description=XAUUSD IG Streaming Telegram Bot
+Description=XAUUSD Massive REST Telegram Bot
 After=network-online.target
 
 [Service]
