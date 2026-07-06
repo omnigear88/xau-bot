@@ -48,6 +48,17 @@ TELEGRAM_XAU_CHAT_ID=your_telegram_chat_id
 
 ## Commands
 
+Recommended helper script:
+
+```bash
+./run.sh offline
+./run.sh bootstrap --days 250
+./run.sh live
+```
+
+`run.sh` changes into the project directory, activates `.venv`, checks that
+`.env` exists, and forwards all arguments to `bot.py`.
+
 Bootstrap recent 1-minute XAUUSD candles from Massive into SQLite:
 
 ```bash
