@@ -54,6 +54,14 @@ Bootstrap recent 1-minute XAUUSD candles from Massive into SQLite:
 python bot.py bootstrap
 ```
 
+For a longer VPS backfill, bootstrap paginates the Massive range in smaller
+chunks to avoid the 50,000-candle REST cap:
+
+```bash
+python bot.py bootstrap --days 250
+python bot.py offline
+```
+
 Run live Massive REST polling. This fetches recent completed 1-minute candles
 every 60 seconds, saves new candles to SQLite, and evaluates the strategy after
 completed 15-minute boundaries:
