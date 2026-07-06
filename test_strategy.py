@@ -12,6 +12,11 @@ def main():
     scores = score_all_timeframes(timeframes)
 
     for timeframe, result in scores.items():
+        if not 0 <= result["score"] <= 100:
+            raise AssertionError(
+                f"{timeframe} score out of range: {result['score']}"
+            )
+
         print(f"\n{timeframe}")
         print(f"Direction: {result['direction']}")
         print(f"Score: {result['score']}")

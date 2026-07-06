@@ -1,4 +1,4 @@
-DIRECTIONAL_SCORE_MAX = 80
+DIRECTIONAL_SCORE_MAX = 90
 
 
 def score_timeframe(df):
@@ -259,7 +259,8 @@ def _confidence(score):
 
 
 def _normalize_score(raw_score):
-    return round(raw_score / DIRECTIONAL_SCORE_MAX * 100)
+    score = round(raw_score / DIRECTIONAL_SCORE_MAX * 100)
+    return max(0, min(100, score))
 
 
 def _has_value(row, column):

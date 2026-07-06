@@ -137,7 +137,7 @@ The main scoring functions are:
 Each score result contains:
 
 - `direction` - `Bullish`, `Bearish`, `Neutral`, or `Insufficient Data`
-- `score` - integer from 0 to 100, calculated as `round(raw_score / 80 * 100)`
+- `score` - integer from 0 to 100, calculated as `round(raw_score / 90 * 100)`
 - `confidence` - `Low`, `Medium`, or `High`
 - `atr_14` - latest ATR value, or `None` when unavailable
 - `volatility_note` - `ATR available` or `ATR unavailable`
@@ -148,7 +148,7 @@ position, EMA13 slope, RSI14, MACD histogram, and previous close. ATR is
 reported as volatility information only; it does not add bullish or bearish
 points.
 
-Bullish raw max score is 80:
+Bullish raw max score is 90:
 
 - close > ema_13: +10
 - ema_13 > ema_21: +15
@@ -159,7 +159,7 @@ Bullish raw max score is 80:
 - macd_hist > 0: +10
 - close > previous close: +10
 
-Bearish raw max score is 80 using the mirrored conditions. The returned score
+Bearish raw max score is 90 using the mirrored conditions. The returned score
 normalizes that raw score to 0-100.
 
 To test the trend score engine against all local timeframes:
